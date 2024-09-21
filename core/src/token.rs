@@ -85,6 +85,58 @@ impl TokenProvider {
             client_id,
             self.session().device_id(),
         );
+
+        info!("hmk, client_id: {:#?}", client_id);
+        //info!("hmk, device_id: {:#?}", self.session().device_id());
+        //info!("hmk, query_uri: {:#?}", query_uri);
+
+        let request = self.session().mercury().get(query_uri)?;
+        let response = request.await?;
+        let data = response.payload.first().ok_or(TokenError::Empty)?.to_vec();
+        let token = Token::from_json(String::from_utf8(data)?)?;
+        trace!("Got token: {:#?}", token);
+        self.lock(|inner| inner.tokens.push(token.clone()));
+        Ok(token)
+    }
+
+    pub async fn get_token_patch(&self, scopes: &str) -> Result<Token, Error> {
+        let client_id = self.session().client_id();
+        if client_id.is_empty() {
+            return Err(Error::invalid_argument("Client ID cannot be empty"));
+        }
+
+        if let Some(index) = self.find_token(scopes.split(',').collect()) {
+            let cached_token = self.lock(|inner| inner.tokens[index].clone());
+            if cached_token.is_expired() {
+                self.lock(|inner| inner.tokens.remove(index));
+            } else {
+                return Ok(cached_token);
+            }
+        }
+
+        trace!(
+            "Requested token in scopes {:?} unavailable or expired, requesting new token.",
+            scopes
+        );
+
+        let client_id_patch: &str = "65b708073fc0480ea92a077233ca87bd";
+
+        let query_uri = format!(
+            "hm://keymaster/token/authenticated?scope={}&client_id={}&device_id={}",
+            scopes,
+            client_id_patch,
+            self.session().device_id(),
+        );
+        /*
+        pub(crate) const KEYMASTER_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
+        pub(crate) const ANDROID_CLIENT_ID: &str = "9a8d2f0ce77a4e248bb71fefcb557637";
+        pub(crate) const IOS_CLIENT_ID: &str = "58bd3c95768941ea9eb4350aaa033eb3";
+        */
+        info!("hmk patch, client_id: {:#?}", client_id);
+        info!("hmk patch, client_id_patch: {:#?}", client_id_patch);
+        //info!("hmk patch, device_id: {:#?}", self.session().device_id());
+        //info!("hmk patch, query_uri: {:#?}", query_uri);
+
         let request = self.session().mercury().get(query_uri)?;
         let response = request.await?;
         let data = response.payload.first().ok_or(TokenError::Empty)?.to_vec();

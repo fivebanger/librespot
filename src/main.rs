@@ -1910,6 +1910,25 @@ async fn main() {
                 spirc_task = Some(Box::pin(spirc_task_));
 
                 connecting = false;
+
+                /* without asking here, get_token(scopes_fail) results in some error 
+                let scopes_ok: &str = "streaming";
+                let scopes_fail: &str = "user-read-playback-state";
+                let mut token = session.token_provider().get_token(scopes_fail).await;
+                if token.is_ok() {
+                    //println!("Got me a token: {token:#?}");
+                    info!("Token ok");
+                } else {
+                    println!("Token error");
+                }
+                token = session.token_provider().get_token(scopes_ok).await;
+                if token.is_ok() {
+                    //println!("Got me a token: {token:#?}");
+                    info!("Token ok");
+                } else {
+                    println!("Token error");
+                }
+                */
             },
             _ = async {
                 if let Some(task) = spirc_task.as_mut() {
@@ -1941,6 +1960,24 @@ async fn main() {
                 exit(1);
             },
             _ = tokio::signal::ctrl_c() => {
+                /* debug code goes here: get_token(scopes_fail) fails, if not asked for a token before, passes, when already asked for a token */
+                let scopes_ok: &str = "streaming";
+                let scopes_fail: &str = "user-read-playback-state";
+                let mut token = session.token_provider().get_token_patch(scopes_fail).await;
+                if token.is_ok() {
+                    //println!("Got me a token: {token:#?}");
+                    info!("Token ok");
+                } else {
+                    error!("Token error");
+                }
+                token = session.token_provider().get_token_patch(scopes_ok).await;
+                if token.is_ok() {
+                    //println!("Got me a token: {token:#?}");
+                    info!("Token ok");
+                } else {
+                    error!("Token error");
+                }
+
                 break;
             },
             else => break,
