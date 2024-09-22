@@ -64,20 +64,26 @@ impl TokenProvider {
         if client_id.is_empty() {
             return Err(Error::invalid_argument("Client ID cannot be empty"));
         }
+        info!("Librespot requests a token, scopes: {:?}", scopes);
 
         if let Some(index) = self.find_token(scopes.split(',').collect()) {
             let cached_token = self.lock(|inner| inner.tokens[index].clone());
             if cached_token.is_expired() {
                 self.lock(|inner| inner.tokens.remove(index));
             } else {
+                info!("use a cached token");
                 return Ok(cached_token);
             }
         }
 
-        trace!(
+        info!(
             "Requested token in scopes {:?} unavailable or expired, requesting new token.",
             scopes
         );
+
+        info!("client_id = self.session().client_id(): {:#?}", client_id);
+        //info!("device_id: {:#?}", self.session().device_id());
+        //info!("query_uri: {:#?}", query_uri);
 
         let query_uri = format!(
             "hm://keymaster/token/authenticated?scope={}&client_id={}&device_id={}",
@@ -86,9 +92,48 @@ impl TokenProvider {
             self.session().device_id(),
         );
 
-        info!("hmk, client_id: {:#?}", client_id);
-        //info!("hmk, device_id: {:#?}", self.session().device_id());
-        //info!("hmk, query_uri: {:#?}", query_uri);
+        let request = self.session().mercury().get(query_uri)?;
+        let response = request.await?;
+        let data = response.payload.first().ok_or(TokenError::Empty)?.to_vec();
+        let token = Token::from_json(String::from_utf8(data)?)?;
+        trace!("Got token: {:#?}", token);
+        self.lock(|inner| inner.tokens.push(token.clone()));
+        Ok(token)
+    }
+
+    // scopes must be comma-separated
+    pub async fn get_token_user(&self, scopes: &str) -> Result<Token, Error> {
+        let client_id = self.session().client_id();
+        if client_id.is_empty() {
+            return Err(Error::invalid_argument("Client ID cannot be empty"));
+        }
+        info!("User requests a token, client_id not hard coded, scopes: {:?}", scopes);
+
+        if let Some(index) = self.find_token(scopes.split(',').collect()) {
+            let cached_token = self.lock(|inner| inner.tokens[index].clone());
+            if cached_token.is_expired() {
+                self.lock(|inner| inner.tokens.remove(index));
+            } else {
+                info!("use a cached token");
+                return Ok(cached_token);
+            }
+        }
+
+        info!(
+            "Requested token in scopes {:?} unavailable or expired, requesting new token.",
+            scopes
+        );
+
+        info!("user, client_id = self.session().client_id(): {:#?}", client_id);
+        //info!("user, device_id: {:#?}", self.session().device_id());
+        //info!("user, query_uri: {:#?}", query_uri);
+
+        let query_uri = format!(
+            "hm://keymaster/token/authenticated?scope={}&client_id={}&device_id={}",
+            scopes,
+            client_id,
+            self.session().device_id(),
+        );
 
         let request = self.session().mercury().get(query_uri)?;
         let response = request.await?;
@@ -104,22 +149,34 @@ impl TokenProvider {
         if client_id.is_empty() {
             return Err(Error::invalid_argument("Client ID cannot be empty"));
         }
+        info!("User requests a token, client_id is hard coded, : {:?}", scopes);
 
         if let Some(index) = self.find_token(scopes.split(',').collect()) {
             let cached_token = self.lock(|inner| inner.tokens[index].clone());
             if cached_token.is_expired() {
                 self.lock(|inner| inner.tokens.remove(index));
             } else {
+                info!("use a cached token");
                 return Ok(cached_token);
             }
         }
 
-        trace!(
+        info!(
             "Requested token in scopes {:?} unavailable or expired, requesting new token.",
             scopes
         );
+        /*
+        pub(crate) const KEYMASTER_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
+        pub(crate) const ANDROID_CLIENT_ID: &str = "9a8d2f0ce77a4e248bb71fefcb557637";
+        pub(crate) const IOS_CLIENT_ID: &str = "58bd3c95768941ea9eb4350aaa033eb3";
+        */
 
         let client_id_patch: &str = "65b708073fc0480ea92a077233ca87bd";
+
+        info!("patch, self.session().client_id(): {:#?}", client_id);
+        info!("patch, client_id_patch = hard coded: {:#?}", client_id_patch);
+        //info!("patch, device_id: {:#?}", self.session().device_id());
+        //info!("patch, query_uri: {:#?}", query_uri);
 
         let query_uri = format!(
             "hm://keymaster/token/authenticated?scope={}&client_id={}&device_id={}",
@@ -127,15 +184,6 @@ impl TokenProvider {
             client_id_patch,
             self.session().device_id(),
         );
-        /*
-        pub(crate) const KEYMASTER_CLIENT_ID: &str = "65b708073fc0480ea92a077233ca87bd";
-        pub(crate) const ANDROID_CLIENT_ID: &str = "9a8d2f0ce77a4e248bb71fefcb557637";
-        pub(crate) const IOS_CLIENT_ID: &str = "58bd3c95768941ea9eb4350aaa033eb3";
-        */
-        info!("hmk patch, client_id: {:#?}", client_id);
-        info!("hmk patch, client_id_patch: {:#?}", client_id_patch);
-        //info!("hmk patch, device_id: {:#?}", self.session().device_id());
-        //info!("hmk patch, query_uri: {:#?}", query_uri);
 
         let request = self.session().mercury().get(query_uri)?;
         let response = request.await?;
